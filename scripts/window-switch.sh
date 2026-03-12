@@ -1,18 +1,13 @@
 #!/usr/bin/env bash
 # Switch windows sorted by Most Recently Used order using fzf
 
-get_fzf_bin() {
-    # Use tmux-fzf's fzf if available, otherwise find fzf directly
-    local tmux_fzf_dir="$HOME/.tmux/plugins/tmux-fzf"
-    if [[ -f "$tmux_fzf_dir/scripts/.envs" ]]; then
-        source "$tmux_fzf_dir/scripts/.envs"
-        echo "$TMUX_FZF_BIN"
-        return
-    fi
-    command -v fzf 2>/dev/null
-}
+# Load tmux-fzf environment if available (sets TMUX_FZF_BIN, TMUX_FZF_OPTIONS, etc.)
+TMUX_FZF_DIR="$HOME/.tmux/plugins/tmux-fzf"
+if [[ -f "$TMUX_FZF_DIR/scripts/.envs" ]]; then
+    source "$TMUX_FZF_DIR/scripts/.envs"
+fi
 
-FZF_BIN=$(get_fzf_bin)
+FZF_BIN="${TMUX_FZF_BIN:-$(command -v fzf-tmux 2>/dev/null || command -v fzf 2>/dev/null)}"
 if [[ -z "$FZF_BIN" ]]; then
     tmux display-message "tmux-window-mru: fzf not found"
     exit 1
@@ -41,13 +36,9 @@ if [[ -z "$sorted" ]]; then
     exit 0
 fi
 
-# fzf options
-fzf_opts="--height=50% --reverse --no-sort --header='Switch window (MRU order)'"
-if [[ -n "$TMUX_FZF_OPTIONS" ]]; then
-    fzf_opts="$TMUX_FZF_OPTIONS --no-sort --header='Switch window (MRU order)'"
-fi
+fzf_opts="${TMUX_FZF_OPTIONS:---height=50% --reverse} --no-sort --header='Switch window (MRU order)'"
 
-target=$(printf "%s\n[cancel]" "$sorted" | eval "$FZF_BIN $fzf_opts")
+target=$(printf "%s\n[cancel]" "$sorted" | eval "$FZF_BIN $fzf_opts $TMUX_FZF_PREVIEW_OPTIONS")
 
 [[ "$target" == "[cancel]" || -z "$target" ]] && exit 0
 
