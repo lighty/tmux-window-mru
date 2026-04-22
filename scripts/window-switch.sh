@@ -1,35 +1,23 @@
 #!/usr/bin/env bash
 # Switch windows sorted by Most Recently Used order using fzf
 
-# Load tmux-fzf environment if available (sets TMUX_FZF_BIN, TMUX_FZF_OPTIONS, etc.)
-TMUX_FZF_DIR="$HOME/.tmux/plugins/tmux-fzf"
-if [[ -f "$TMUX_FZF_DIR/scripts/.envs" ]]; then
-    source "$TMUX_FZF_DIR/scripts/.envs"
-fi
-
+# Resolve fzf binary (skip heavy .envs loading)
 FZF_BIN="${TMUX_FZF_BIN:-$(command -v fzf-tmux 2>/dev/null || command -v fzf 2>/dev/null)}"
 if [[ -z "$FZF_BIN" ]]; then
     tmux display-message "tmux-window-mru: fzf not found"
     exit 1
 fi
 
+# Use tmux-fzf popup options if available
+if [[ -z "$TMUX_FZF_OPTIONS" ]]; then
+    TMUX_FZF_OPTIONS="-p -w 62% -h 38% -m"
+fi
+
 current_window=$(tmux display-message -p '#S:#I')
 
-# Collect all windows with their MRU timestamps
-windows=""
-while IFS= read -r line; do
-    session_window=$(echo "$line" | cut -d' ' -f1)
-    window_name=$(echo "$line" | cut -d' ' -f2-)
-
-    # Get the MRU timestamp (0 if never visited)
-    ts=$(tmux show-option -wqv -t "$session_window" @mru_timestamp 2>/dev/null)
-    ts="${ts:-0}"
-
-    windows+="${ts} ${session_window}: ${window_name}"$'\n'
-done < <(tmux list-windows -a -F '#S:#I #{window_name}')
-
-# Sort by timestamp descending, strip timestamp, remove current window
-sorted=$(echo -n "$windows" | sort -rn | sed 's/^[0-9]* //' | grep -v "^${current_window}:")
+# Get all windows with MRU timestamps in a single tmux call, sort, and filter
+sorted=$(tmux list-windows -a -F '#{@mru_timestamp} #S:#I: #{window_name}' \
+    | sort -rn | sed 's/^[0-9]* //' | grep -v "^${current_window}:")
 
 if [[ -z "$sorted" ]]; then
     tmux display-message "No other windows"
@@ -38,7 +26,7 @@ fi
 
 fzf_opts="${TMUX_FZF_OPTIONS:---height=50% --reverse} --no-sort --header='Switch window (MRU order)'"
 
-target=$(printf "%s\n[cancel]" "$sorted" | eval "$FZF_BIN $fzf_opts $TMUX_FZF_PREVIEW_OPTIONS")
+target=$(printf "%s\n[cancel]" "$sorted" | eval "$FZF_BIN $fzf_opts")
 
 [[ "$target" == "[cancel]" || -z "$target" ]] && exit 0
 
